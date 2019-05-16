@@ -30,6 +30,7 @@ const get = async (req, res) => {
     bathroom, bathroomMin, bathroomMax
   );
 
+  // Sorting results by score
   results = _.orderBy(results, ['score'], ['desc']);
 
   // Filtering null results
