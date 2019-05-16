@@ -48,6 +48,7 @@ const scoreMatches = (results, budget, budgetMin, budgetMax, bedroom, bedroomMin
   return _.map(results, (result) => {
     // Adding score if does not exists
     result = Score.addScore(result);
+    
     result = Score.distance(result);
     result = Score.budget(result, budget, budgetMin, budgetMax);
     result = Score.room(result, 'bedrooms', bedroom, bedroomMin, bedroomMax);
