@@ -1,12 +1,9 @@
-const { Db, MinMax, Store } = require('../lib');
+const { Constants, Db, MinMax, Store, Score, Util } = require('../lib');
 const _ = require('lodash');
-
-const DISTANCE_THRESHOLD = 2;
-const DISTANCE_FULL_MATCH = 30;
 
 
 const get = async (req, res) => {
-  const cached = getCached(req);
+  const cached = Store.get(Util.formatKey(req.query));
   if (cached) {
     console.log('RETURNING CACHED RESULTS');
     return res.send(cached);
@@ -33,108 +30,31 @@ const get = async (req, res) => {
     bathroom, bathroomMin, bathroomMax
   );
 
+  results = _.orderBy(results, ['score'], ['desc']);
+
   // Filtering null results
   results = _.without(results, undefined)
 
   // Caching results
-  Store.set(formatKey(req.query), results);
+  Store.set(Util.formatKey(req.query), results);
   
   // Return results
   res.send(results);
 };
 
 
-const getCached = (req) => {
-  const key = formatKey(req.query);
-  return Store.get(key);
-}
-
-
-const formatKey = ({ lat, lng, budgetMin, budgetMax, bathroomMin, bathroomMax, bedroomMin, bedroomMax, offset }) => {
-  return `${lat}_${lng}_${budgetMin}_${budgetMax}_${bathroomMin}_${bathroomMax}_${bedroomMin}_${bedroomMax}_${offset}`;
-}
-
-const addScore = (result) => {
-  if (!result.score) {
-    result.score = 0;
-  }
-
-  return result;
-}
-
-const percentage = (value, percent) => {
-  return (Number(value) * percent) / 100;
-}
-
-const matchPercentage = (value, valueTwo) => {
-  if (value < valueTwo) {
-    return (value / valueTwo) * 100;
-  }
-
-  return (valueTwo / value) * 100;
-}
-
-
 const scoreMatches = (results, budget, budgetMin, budgetMax, bedroom, bedroomMin, bedroomMax, bathroom, bathroomMin, bathroomMax) => {
   return _.map(results, (result) => {
     // Adding score if does not exists
-    result = addScore(result);
-    result = scoreDistance(result);
-    result = scoreBudget(result, budget, budgetMin, budgetMax);
-    result = scoreRoom(result, 'bedrooms', bedroom, bedroomMin, bedroomMax);
-    result = scoreRoom(result, 'bathrooms', bathroom, bathroomMin, bathroomMax);
-    if (result.score >= 40) {
+    result = Score.addScore(result);
+    result = Score.distance(result);
+    result = Score.budget(result, budget, budgetMin, budgetMax);
+    result = Score.room(result, 'bedrooms', bedroom, bedroomMin, bedroomMax);
+    result = Score.room(result, 'bathrooms', bathroom, bathroomMin, bathroomMax);
+    if (result.score >= Constants.GOOD_MATCH_THRESHOLD) {
       return result;
     }
   });
-}
-
-
-const scoreDistance = (result) => {
-  if (result.distance < DISTANCE_THRESHOLD) {
-    result.score = DISTANCE_FULL_MATCH;
-  } else {
-    // TODO Change this after getting answer from mail
-    result.score = Number(result.score) +  20;
-  }
-
-  return result;
-}
-
-
-const scoreBudget = (result, budget, budgetMin, budgetMax) => {
-  if (!budget) {
-    if (result.price <= budgetMax && result.price >= budgetMin) {
-      result.score = Number(result.score) + 30;
-    } else {
-      result.score = 0;
-    }
-  } else if (budget) {
-    const bPercent = percentage(budget, 10);
-    if (result.price >= Number(budget) - bPercent && result.price <= Number(budget) + bPercent) {
-      result.score = Number(result.score) + 30;
-    } else {
-      result.score = 0;
-    }
-  }
-
-  return result;
-}
-
-
-const scoreRoom = (result, key, room, roomMin, roomMax) => {
-  if (!room) {
-    if (result[key] >= roomMin && result[key] <= roomMax) {
-      result.score = Number(result.score) +  20;
-    } else {
-      result.score = 0;
-    }
-  } else {
-    let bPercent = matchPercentage(result[key], room);
-    result.score = Number(result.score) + percentage(20, bPercent);
-  }
-
-  return result;
 }
 
 module.exports = {
